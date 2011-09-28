@@ -1,0 +1,276 @@
+<html>
+    <head>
+        <script src="CubicVR.js" type="text/javascript"></script>
+
+        <script type="text/javascript" src="../../pdf.js"></script>
+        <script type="text/javascript" src="../../metrics.js"></script>
+        <script type="text/javascript" src="../../fonts.js"></script>
+        <script type="text/javascript" src="../../glyphlist.js"></script>
+        <script type="text/javascript" src="hello.js"></script>
+
+        <script type='text/javascript'>
+            var imgUrls = [];
+
+            var gl;
+            var images = [];  // our images
+            var panels = [];  // our panel objects
+            var scene;  // scene container
+            var light;  // light source
+            var xmove = 0;  // camera left/right mover
+            var mpos = [0, 0];  // mouse tracking
+            var mdown = false;  // mouse button state
+
+            // generate a panel SceneObject and add to scene, takes an Image() as parameter
+            function makePanel(img) { 
+                var i = 0;
+                var material;
+                var panelMesh, panel;  
+
+                // panel maximum square size
+                var panelSize = 1.2;
+                // half size (edge distance from center)
+                var hp = panelSize / 2.0;
+
+                // image aspect for calculating panel dimensions
+                var imageAspect = img.width / img.height;
+                // panel scale factors
+                var xscale = 1.0, 
+                    yscale = 1.0;
+
+                // check image aspect and generate scale factors
+                if (imageAspect < 1.0) {
+                    xscale = imageAspect;
+                } else {
+                    yscale = 1.0 / imageAspect;
+                }
+
+                // Create a material for the mesh
+                material = new CubicVR.Material({
+                    textures: {
+                        color: new CubicVR.CanvasTexture(img)
+                    },
+                    opacity: 0.999
+                });
+
+                // create a new mesh
+                panelMesh = new CubicVR.Mesh();
+                // assign our material for next faces
+                panelMesh.setFaceMaterial(material);
+
+                // add points representing a quad, use scales to shape to image dimensions
+                panelMesh.addPoint([
+                    [-hp * xscale, hp * yscale, 0],
+                    [-hp * xscale, -hp * yscale, 0],
+                    [hp * xscale, -hp * yscale, 0],
+                    [hp * xscale, hp * yscale, 0]
+                ]);
+                // add a face to the mesh using the 4 points we added
+                panelMesh.addFace([0, 1, 2, 3]);
+                // set the U,V (image coordinates) for each corner, normalized from 0->1 (x: bottom->top, y: left->right)
+                panelMesh.faces[0].setUV([
+                    [0, 1],
+                    [0, 0],
+                    [1, 0],
+                    [1, 1]
+                ]);
+
+                // we need triangles so split our quad
+                panelMesh.triangulateQuads();
+                // calculate normals for lighting
+                panelMesh.calcNormals();
+                // generate VBO (Vertex Buffer Object) and buffer to GPU
+                panelMesh.compile();
+                // remove redundant point/face data (it's now buffered on the GPU, don't need it)
+                panelMesh.clean();
+
+                // create a new SceneObject for our scene
+                panel = new CubicVR.SceneObject(panelMesh);
+                // use the image index as a simple x-offset position and center everything
+                // ensuring each image panel sits on a whole number on the x-axis
+                panel.position = [i - Math.floor(imgUrls.length / 2.0), 0, 0];
+
+                // add our panel to the scene, this makes it visible to the camera
+                scene.bindSceneObject(panel);
+
+                // store our panel for later
+                panels[i] = panel;
+            }
+
+
+            function drawGallery() {
+                // clear the screen
+                gl.clearColor(1,1,1,1);
+
+                // if the mouse isn't pressed down, then ease to the nearest whole number on the x-axis
+                // each image sits on a whole number so we'll be centering on the closest one
+                if (!mdown) {
+                    xmove = ((Math.round(scene.camera.position[0])) - scene.camera.position[0]) * 0.1;
+                    moveView();
+                }
+
+                // point panels towards the camera
+                for (var c = 0; c < panels.length; c++) {
+                    // skip this panel if it isn't loaded yet..
+                    if (!panels[c]) continue;
+
+                    // set the Y-axis rotation to be equal to the angle between the vectors from the camera to the target and the camera to the panel
+                    // effectively pointing the panel towards the camera
+                    var panelVec = CubicVR.vec3.subtract(scene.camera.position, panels[c].position);
+                    var forwardVec = [0, 0, 1];
+                    panels[c].rotation[1] = CubicVR.vec3.angle(panelVec, forwardVec) * (180.0 / Math.PI);
+
+                    // if the panel is to our right, rotate the other way (vec3.angle returns abs() degrees only so we adjust)
+                    if (panels[c].position[0] > scene.camera.position[0]) panels[c].rotation[1] = -panels[c].rotation[1];
+                }
+
+                // draw our gallery panels using the scene camera
+                scene.render();
+            }
+
+
+            // adjust view position based on xmove
+            function moveView() {
+                // our min/max for the image whole number boundaries
+                var max = Math.floor(imgUrls.length / 2);
+                var min = -max;
+                max--;
+
+                // move the camera, target and position in unison
+                scene.camera.position[0] += xmove;
+                scene.camera.target[0] += xmove;
+                light.position[0] += xmove;
+
+                // if they stray outside the whole number bounds clamp them.
+                if (scene.camera.position[0] < min) {
+                    scene.camera.position[0] = scene.camera.target[0] = light.position[0] = min;
+                }
+                if (scene.camera.position[0] > max) {
+                    scene.camera.position[0] = scene.camera.target[0] = light.position[0] = max;
+                }
+            }
+
+
+            // initialize the gallery and CubicVR
+            function webGLStart() {
+                console.log('starting');
+
+                var canvas = document.getElementById("gallery"),
+                  pdfCanvas = document.getElementById('pdf-canvas');
+
+                gl = CubicVR.init(canvas);
+/*
+
+                // fetch our canvas object and request a webgl context
+
+
+                try {
+                    gl = canvas.getContext("experimental-webgl");
+                    gl.viewport(0, 0, canvas.width, canvas.height);
+                } catch (e) {}
+
+                if (!gl) {
+                    alert("Could not initialise WebGL, sorry :-(");
+                    return;
+                }
+
+                // initialize the CubicVR.js core shaders
+                CubicVR.GLCore.init(gl, "CubicVR/CubicVR_Core.vs", "CubicVR/CubicVR_Core.fs");
+*/
+
+                // build a scene with a default camera of our canvas dimensions and 60 degree FOV
+                scene = new CubicVR.Scene(canvas.width, canvas.height, 60.0);
+
+/*
+                // spin through our image urls and set up an async panel generation for each
+                for (var i = 0; i < imgUrls.length; i++) {
+                    images[i] = new Image();
+                    images[i].imageId = i;
+                    images[i].onload = function() {
+                        makePanel(this);
+                    };
+                    images[i].src = imgUrls[i];
+                }
+*/
+
+                makePanel(pdfCanvas);
+
+                // set up our default camera position
+                scene.camera.setTargeted(true);
+                scene.camera.position = [0, 0, 1];
+                scene.camera.target = [0, 0, 0];
+
+                // Add a simple point light source to add some shading and depth
+                light = new CubicVR.Light(CubicVR.enums.light.type.POINT);
+                light.distance = 1.75;
+                light.intensity = 3.0;
+                light.position = [0, 0, 1]; // positioned at the camera
+                light.diffuse = [1, 1, 1];
+
+                // bind it to our scene to make it visible to the camera
+                scene.bindLight(light);
+
+                // clear the canvas and set basic defaults for GL
+                gl.enable(gl.DEPTH_TEST);
+                gl.depthFunc(gl.LEQUAL);
+                gl.clearDepth(1.0);
+                gl.clearColor(1, 1, 1, 1);
+
+                // start the gallery drawing
+                setInterval(drawGallery, 25);
+
+                // bind mouse events
+                canvas.addEventListener('mousemove', mouseMove, false);
+                canvas.addEventListener('mousedown', mouseDown, false);
+                canvas.addEventListener('mouseup', mouseUp, false);
+                canvas.addEventListener('mouseout', mouseUp, false);
+                canvas.addEventListener('mousewheel', mouseWheel, false);
+                canvas.addEventListener('DOMMouseScroll', mouseWheel, false);
+            }
+
+            // simple mouse delta tracking on mousedown
+            function mouseDown(ev) {
+                mdown = true;
+                mpos = [ev.clientX, ev.clientY];
+            }
+
+            function mouseUp(ev) {
+                mdown = false;
+            }
+
+            function mouseMove(ev) {
+                if (!mdown) return;
+
+                mdelta = [mpos[0] - ev.clientX, mpos[1] - ev.clientY];
+                mpos = [ev.clientX, ev.clientY];
+                
+                // move the camera relative to our mouse movement by adjusting xmove
+                xmove = mdelta[0] / 200;
+                moveView();
+            }
+
+            // simple FOV zoom using the mouse scroll
+            function mouseWheel(ev) {
+                var min = 10;
+                var max = 100;
+
+                var delta = ev.wheelDelta ? (-ev.wheelDelta/10.0) : (ev.detail);
+
+                scene.camera.setFOV(scene.camera.fov + delta);
+
+                if (scene.camera.fov < min) scene.camera.setFOV(min);
+                if (scene.camera.fov > max) scene.camera.setFOV(max);
+            }
+        </script>
+    </head>
+    
+    <body>
+        <div style='text-align:center; font-family:arial'>
+            Simple WebGL image gallery using CubicVR.js<br/><br/>
+            <canvas id="gallery" width="1000" height="400"></canvas><br/><br/>
+            Drag left/right to move, mouse wheel to zoom.
+        </div>
+
+      <canvas id="pdf-canvas" width="512" height="512"></canvas>
+    </body>
+
+</html>
