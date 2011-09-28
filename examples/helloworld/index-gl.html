@@ -1,0 +1,91 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <title>pdf.js + CubicVR.js</title>
+        <script src="CubicVR.js" type="text/javascript"></script>
+
+        <script type="text/javascript" src="../../pdf.js"></script>
+        <script type="text/javascript" src="../../metrics.js"></script>
+        <script type="text/javascript" src="../../fonts.js"></script>
+        <script type="text/javascript" src="../../glyphlist.js"></script>
+        <script type="text/javascript" src="hello.js"></script>
+
+        <script type='text/javascript'>
+            function webGLStart() {
+                var gl = CubicVR.init(),
+                  canvas = CubicVR.getCanvas(),
+                  pdfCanvas = document.getElementById('pdf-canvas');
+
+                if (!gl) {
+                    alert("Sorry, no WebGL support.");
+                    return;
+                };
+
+                var pdfTexture = new CubicVR.CanvasTexture(pdfCanvas);
+
+                // Create a material for the mesh
+                var boxMaterial = new CubicVR.Material({
+                    textures: {
+                        color: pdfTexture
+                    },
+                    opacity: 0.999
+                });
+
+                // Add a box to mesh, size 1.0, apply material and UV parameters
+                var boxMesh = CubicVR.primitives.box({
+                    size: 1,
+                    material: boxMaterial,
+                    uvmapper: {
+                        projectionMode: CubicVR.enums.uv.projection.CUBIC,
+                        projectionAxis: CubicVR.enums.uv.axis.Z,
+                        scale: [1, 1, 1]
+                    }
+                });
+
+                // triangulate and buffer object to GPU, remove unused data
+                boxMesh.prepare();
+
+                // New scene with our canvas dimensions and default camera with FOV 80
+                var scene = new CubicVR.Scene(canvas.width, canvas.height, 80);
+
+                var boxObjects = [];
+                // SceneObject container for the mesh
+                for (var i=0; i<20; ++i) {
+                  for (var j=0; j<20; ++j) {
+                    var boxObject = new CubicVR.SceneObject(boxMesh);
+                    boxObjects.push(boxObject);
+                    boxObject.position = [-10 + i, 0, -10 + j];
+                    scene.bindSceneObject(boxObject);
+                  }
+                }
+
+                // set initial camera position and target
+                scene.camera.position = [1, 1, 1];
+                scene.camera.target = [0, 0, 0];
+
+                // Add our scene to the window resize list
+                CubicVR.addResizeable(scene);
+
+                // Start our main drawing loop, it provides a timer and the gl context as parameters
+                CubicVR.MainLoop(function(timer, gl) {
+                    gl.clearColor(1,1,1,1);
+                    var seconds = timer.getSeconds();
+                    pdfTexture.update();
+                    scene.render();
+                    for (var i=0; i<20; ++i) {
+                      var z = Math.abs(.5 + .5*Math.sin(i/5 + seconds));
+                      for (var j=0; j<20; ++j) {
+                        boxObjects[i*20+j].scale = [z, z, z];
+                      }
+                    }
+
+                    scene.camera.target = [Math.sin(seconds/2)*3, 0, Math.cos(seconds/5)*3];
+                    scene.camera.position = [Math.sin(seconds/20)*8, 1, -Math.cos(seconds/25)*8];
+                });
+            }
+        </script>
+    </head>
+    <body>
+      <canvas id="pdf-canvas" width="512" height="512"></canvas>
+    </body>
+</html>

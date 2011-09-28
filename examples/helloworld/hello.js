@@ -5,27 +5,18 @@
 // See README for overview
 //
 
-'use strict';
+addEventListener('DOMContentLoaded', function() {
+  getPdf('helloworld.pdf', function getPdfHelloWorld(data) {
+    // Instantiate PDFDoc with PDF data
+    var pdf = new PDFDoc(data);
+    var page = pdf.getPage(1);
+    var scale = 1.5;
 
-getPdf('helloworld.pdf', function getPdfHelloWorld(data) {
-  //
-  // Instantiate PDFDoc with PDF data
-  //
-  var pdf = new PDFDoc(data);
-  var page = pdf.getPage(1);
-  var scale = 1.5;
+    // Prepare canvas using PDF page dimensions
+    var canvas = document.getElementById('pdf-canvas');
+    var context = canvas.getContext('2d');
 
-  //
-  // Prepare canvas using PDF page dimensions
-  //
-  var canvas = document.getElementById('the-canvas');
-  var context = canvas.getContext('2d');
-  canvas.height = page.height * scale;
-  canvas.width = page.width * scale;
-
-  //
-  // Render PDF page into canvas context
-  //
-  page.startRendering(context);
-});
-
+    // Render PDF page into canvas context
+    page.startRendering(context, webGLStart());
+  });
+}, false);
