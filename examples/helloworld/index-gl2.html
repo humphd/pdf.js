@@ -45,12 +45,8 @@
                 }
 
                 // Create a material for the mesh
-                material = new CubicVR.Material({
-                    textures: {
-                        color: new CubicVR.CanvasTexture(img)
-                    },
-                    opacity: 0.999
-                });
+                material = new CubicVR.Material({opacity:0.999});
+                material.setTexture(img, CubicVR.enums.texture.map.COLOR);
 
                 // create a new mesh
                 panelMesh = new CubicVR.Mesh();
@@ -99,6 +95,7 @@
 
             function drawGallery() {
                 // clear the screen
+                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
                 gl.clearColor(1,1,1,1);
 
                 // if the mouse isn't pressed down, then ease to the nearest whole number on the x-axis
@@ -158,41 +155,13 @@
                   pdfCanvas = document.getElementById('pdf-canvas');
 
                 gl = CubicVR.init(canvas);
-/*
-
-                // fetch our canvas object and request a webgl context
-
-
-                try {
-                    gl = canvas.getContext("experimental-webgl");
-                    gl.viewport(0, 0, canvas.width, canvas.height);
-                } catch (e) {}
-
-                if (!gl) {
-                    alert("Could not initialise WebGL, sorry :-(");
-                    return;
-                }
-
-                // initialize the CubicVR.js core shaders
-                CubicVR.GLCore.init(gl, "CubicVR/CubicVR_Core.vs", "CubicVR/CubicVR_Core.fs");
-*/
 
                 // build a scene with a default camera of our canvas dimensions and 60 degree FOV
                 scene = new CubicVR.Scene(canvas.width, canvas.height, 60.0);
 
-/*
-                // spin through our image urls and set up an async panel generation for each
-                for (var i = 0; i < imgUrls.length; i++) {
-                    images[i] = new Image();
-                    images[i].imageId = i;
-                    images[i].onload = function() {
-                        makePanel(this);
-                    };
-                    images[i].src = imgUrls[i];
-                }
-*/
-
-                makePanel(pdfCanvas);
+                var myTex = new CubicVR.CanvasTexture(pdfCanvas);
+                myTex.update();
+                makePanel(myTex);
 
                 // set up our default camera position
                 scene.camera.setTargeted(true);
@@ -242,7 +211,7 @@
 
                 mdelta = [mpos[0] - ev.clientX, mpos[1] - ev.clientY];
                 mpos = [ev.clientX, ev.clientY];
-                
+
                 // move the camera relative to our mouse movement by adjusting xmove
                 xmove = mdelta[0] / 200;
                 moveView();
@@ -262,7 +231,7 @@
             }
         </script>
     </head>
-    
+
     <body>
         <div style='text-align:center; font-family:arial'>
             Simple WebGL image gallery using CubicVR.js<br/><br/>
